@@ -28,9 +28,10 @@ def clean_text(raw_text):
     return cleaned_text.strip()
 
 def main():
-    # File paths based on the repository structure
-    input_pdf = "../data/TPC Student Handbook.pdf"
-    output_txt = "../data/cleaned_handbook.txt"
+    # Fix: Use absolute paths based on the script's location to prevent CWD errors
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    input_pdf = os.path.join(base_dir, 'data', 'TPC Student Handbook.pdf')
+    output_txt = os.path.join(base_dir, 'data', 'cleaned_handbook.txt')
 
     print("Starting data extraction...")
     raw_text = extract_text_from_pdf(input_pdf)

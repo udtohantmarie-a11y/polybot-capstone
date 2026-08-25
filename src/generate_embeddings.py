@@ -1,6 +1,7 @@
 import os
 import torch
 from transformers import AutoTokenizer, AutoModel
+import chromadb
 
 def load_cleaned_text(file_path):
     if not os.path.exists(file_path):
@@ -40,7 +41,10 @@ def generate_embeddings(text_chunks, model_name='sentence-transformers/all-MiniL
     return inputs, embeddings
 
 def main():
-    text_path = "../data/cleaned_handbook.txt"
+    # Fix: Use absolute paths based on the script's location to prevent CWD errors
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    text_path = os.path.join(base_dir, 'data', 'cleaned_handbook.txt')
+    db_path = os.path.join(base_dir, 'data', 'chroma_db')
     
     print("Reading cleaned handbook text...")
     text = load_cleaned_text(text_path)
@@ -52,16 +56,39 @@ def main():
     chunks = chunk_text(text, chunk_size=150)
     print(f"Total chunks created: {len(chunks)}")
     
-    # Let's take a sample of the first 5 chunks for the demo script
-    sample_chunks = chunks[:5]
-    
-    inputs, embeddings = generate_embeddings(sample_chunks)
+    # Process all chunks for the database instead of just the sample
+    inputs, embeddings = generate_embeddings(chunks)
     
     print("\n--- Embedding Generation Results ---")
     print("Input IDs Shape:", inputs['input_ids'].shape)
     print("Attention Mask Shape:", inputs['attention_mask'].shape)
     print("Generated Embeddings Shape:", embeddings.shape)
-    print("Embedding generation demo completed successfully!")
+    
+    # New Feature: ChromaDB Integration
+    print("\nInitializing ChromaDB persistent storage...")
+    
+    client = chromadb.PersistentClient(path=db_path)
+    collection = client.get_or_create_collection(name='tpc_student_handbook')
+    
+    print("Adding chunks and generated embeddings to ChromaDB...")
+    # Convert PyTorch tensor to a list of lists of floats for ChromaDB
+    embeddings_list = embeddings.tolist()
+    
+    # Generate unique IDs and metadata for each chunk
+    chunk_ids = [f"chunk_{i}" for i in range(len(chunks))]
+    chunk_metadata = [{"source": "TPC Student Handbook v.04"} for _ in range(len(chunks))]
+    
+    collection.add(
+        documents=chunks,
+        embeddings=embeddings_list,
+        metadatas=chunk_metadata,
+        ids=chunk_ids
+    )
+    
+    print("\n--- ChromaDB Ingestion Results ---")
+    print(f"Vector database populated successfully.")
+    print(f"Database location: {db_path}")
+    print(f"Total documents in collection: {collection.count()}")
 
 if __name__ == "__main__":
     main()
