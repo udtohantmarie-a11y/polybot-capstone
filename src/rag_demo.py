@@ -8,7 +8,6 @@ from google.genai import types
 
 def embed_query(text, model_name='sentence-transformers/all-MiniLM-L6-v2'):
     """Generates an embedding for the query."""
-    print(f"Loading Hugging Face model for query...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModel.from_pretrained(model_name)
     
@@ -38,29 +37,12 @@ def main():
     print("Connecting to ChromaDB...")
     chroma_client = chromadb.PersistentClient(path=db_path)
     collection = chroma_client.get_collection(name='tpc_student_handbook')
-
-    # The user's question optimized for better retrieval of Chapter 6
-    user_query = "What is the grading system rating and description equivalent in Chapter 6?"
-    print(f"\nUser Query: '{user_query}'")
-
-    # 1. Retrieve relevant context from ChromaDB (Increased n_results to capture the rating table)
-    query_embedding = embed_query(user_query)
-    results = collection.query(
-        query_embeddings=query_embedding,
-        n_results=6 # Increased from 3 to 6 to grab more surrounding context blocks
-    )
     
-    # Combine the retrieved chunks into a single context string
-    retrieved_context = "\n\n".join(results['documents'][0])
-    print("\n--- Retrieved Context from Database ---")
-    print(retrieved_context)
-
-    # 2. Initialize Gemini API Client
-    print("\nConnecting to Gemini API...")
-    # The client automatically picks up the GEMINI_API_KEY from the .env file
+    # Initialize Gemini API Client once
+    print("Connecting to Gemini API...")
     gemini_client = genai.Client() 
     
-    # 3. Create the Prompt Architecture (System Instruction)
+    # Create the Prompt Architecture (System Instruction)
     system_instruction = (
         "You are PolyBot, a helpful and accurate Campus Tourism & History Guide for Talibon Polytechnic College (TPC). "
         "Answer the user's question using ONLY the information provided in the context below. "
@@ -68,19 +50,44 @@ def main():
         "Do not use any outside knowledge. Always cite the relevant Article or Chapter if available in the context."
     )
 
-    # 4. Generate the response
-    print("Generating grounded response...")
-    response = gemini_client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=f"<context>\n{retrieved_context}\n</context>\n\nQuestion: {user_query}",
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.0 # Low temperature for factual, deterministic answers
-        )
-    )
+    print("\n=======================================================")
+    print(" PolyBot is ready! Type 'exit' to close the program.")
+    print("=======================================================")
 
-    print("\n--- PolyBot's Final Answer ---")
-    print(response.text)
+    # New Feature: Interactive Chat Loop
+    while True:
+        user_query = input("\n👤 You: ")
+        
+        if user_query.lower() in ['exit', 'quit']:
+            print("🤖 PolyBot: Goodbye!")
+            break
+            
+        if not user_query.strip():
+            continue
+
+        # 1. Retrieve relevant context from ChromaDB
+        query_embedding = embed_query(user_query)
+        results = collection.query(
+            query_embeddings=query_embedding,
+            n_results=6 # Increased from 3 to 6 to grab more surrounding context blocks
+        )
+        
+        # Combine the retrieved chunks into a single context string
+        retrieved_context = "\n\n".join(results['documents'][0])
+
+        # 2. Generate the grounded response
+        try:
+            response = gemini_client.models.generate_content(
+                model='gemini-3.6-flash',
+                contents=f"<context>\n{retrieved_context}\n</context>\n\nQuestion: {user_query}",
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.0 # Low temperature for factual, deterministic answers
+                )
+            )
+            print(f"\n🤖 PolyBot:\n{response.text}")
+        except Exception as e:
+            print(f"\n🤖 PolyBot: Oops, an error occurred: {e}")
 
 if __name__ == "__main__":
     main()
