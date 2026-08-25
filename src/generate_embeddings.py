@@ -5,7 +5,7 @@ import chromadb
 
 def load_cleaned_text(file_path):
     if not os.path.exists(file_path):
-        print(f"Error: {file_path} not found. Please run preprocess.py first.")
+        print(f"Error: {file_path} not found. Please ensure the file exists.")
         return ""
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
@@ -43,21 +43,30 @@ def generate_embeddings(text_chunks, model_name='sentence-transformers/all-MiniL
 def main():
     # Fix: Use absolute paths based on the script's location to prevent CWD errors
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    text_path = os.path.join(base_dir, 'data', 'cleaned_handbook.txt')
+    handbook_path = os.path.join(base_dir, 'data', 'cleaned_handbook.txt')
+    website_path = os.path.join(base_dir, 'data', 'website_content.txt')
     db_path = os.path.join(base_dir, 'data', 'chroma_db')
     
-    print("Reading cleaned handbook text...")
-    text = load_cleaned_text(text_path)
+    print("Reading handbook and website text...")
+    handbook_text = load_cleaned_text(handbook_path)
+    website_text = load_cleaned_text(website_path)
     
-    if not text:
+    if not handbook_text and not website_text:
+        print("No data found to process.")
         return
 
     print("Chunking text...")
-    chunks = chunk_text(text, chunk_size=150)
-    print(f"Total chunks created: {len(chunks)}")
+    handbook_chunks = chunk_text(handbook_text, chunk_size=150) if handbook_text else []
+    website_chunks = chunk_text(website_text, chunk_size=150) if website_text else []
     
+    all_chunks = handbook_chunks + website_chunks
+    print(f"Total chunks created: {len(all_chunks)} ({len(handbook_chunks)} from handbook, {len(website_chunks)} from website)")
+    
+    if not all_chunks:
+        return
+        
     # Process all chunks for the database instead of just the sample
-    inputs, embeddings = generate_embeddings(chunks)
+    inputs, embeddings = generate_embeddings(all_chunks)
     
     print("\n--- Embedding Generation Results ---")
     print("Input IDs Shape:", inputs['input_ids'].shape)
@@ -74,12 +83,21 @@ def main():
     # Convert PyTorch tensor to a list of lists of floats for ChromaDB
     embeddings_list = embeddings.tolist()
     
-    # Generate unique IDs and metadata for each chunk
-    chunk_ids = [f"chunk_{i}" for i in range(len(chunks))]
-    chunk_metadata = [{"source": "TPC Student Handbook v.04"} for _ in range(len(chunks))]
+    # Generate unique IDs and metadata for each chunk based on source
+    chunk_ids = []
+    chunk_metadata = []
     
-    collection.add(
-        documents=chunks,
+    for i in range(len(handbook_chunks)):
+        chunk_ids.append(f"handbook_chunk_{i}")
+        chunk_metadata.append({"source": "TPC Student Handbook v.04"})
+        
+    for i in range(len(website_chunks)):
+        chunk_ids.append(f"website_chunk_{i}")
+        chunk_metadata.append({"source": "TPC Official Website Compilation"})
+    
+    # Using upsert to prevent errors if the database already contains these IDs
+    collection.upsert(
+        documents=all_chunks,
         embeddings=embeddings_list,
         metadatas=chunk_metadata,
         ids=chunk_ids
