@@ -26,6 +26,7 @@ ENV PYTHONUNBUFFERED=1
 COPY app.py .
 COPY src/ ./src/
 COPY data/ ./data/
+COPY assets/ ./assets/
 COPY .streamlit/ ./.streamlit/
 
 ENV PORT=8080

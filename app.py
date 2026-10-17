@@ -59,6 +59,17 @@ st.markdown("""
         margin: 0 4px;
         border: 1px solid #BFDBFE;
     }
+    .visual-pill {
+        display: inline-block;
+        background: #FEF3C7;
+        color: #B45309;
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        margin: 0 4px;
+        border: 1px solid #FDE68A;
+    }
     .citation-box {
         background: #F8FAFC;
         border-left: 3px solid #1B365D;
@@ -94,12 +105,6 @@ st.markdown("""
         border-radius: 9999px;
         border: 1px solid #A7F3D0;
     }
-    .chat-history-item {
-        font-size: 0.88rem;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -134,6 +139,27 @@ def embed_query_text(text: str):
     embeddings = sum_embeddings / sum_mask
     return embeddings.tolist()
 
+def get_uniform_images(query: str):
+    q = query.lower()
+    keywords = ["uniform", "uniporme", "dress code", "dresscode", "sanina", "sinina", "attire", "suot", "bisti", "criminology", "gupit", "haircut"]
+    if not any(k in q for k in keywords):
+        return []
+    
+    imgs = []
+    base_assets = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "uniforms")
+    
+    if "criminology" in q or "crim" in q:
+        imgs.append({"path": os.path.join(base_assets, "criminology_type_a.png"), "caption": "TPC Criminology School Uniform (Type A)"})
+        imgs.append({"path": os.path.join(base_assets, "criminology_type_b.png"), "caption": "TPC Criminology School Uniform (Type B)"})
+        imgs.append({"path": os.path.join(base_assets, "criminology_type_c.png"), "caption": "TPC Criminology School Uniform (Type C)"})
+    elif "dress code" in q or "bawal" in q or "prohibited" in q or "improper" in q:
+        imgs.append({"path": os.path.join(base_assets, "dress_code.png"), "caption": "TPC Proper Dress Code & Prohibited Attire"})
+    else:
+        imgs.append({"path": os.path.join(base_assets, "general_uniform.png"), "caption": "TPC Official School Uniform (Type A for Students)"})
+        imgs.append({"path": os.path.join(base_assets, "dress_code.png"), "caption": "TPC Proper Dress Code & Prohibited Attire"})
+    
+    return [img for img in imgs if os.path.exists(img["path"])]
+
 SYSTEM_INSTRUCTION = (
     "You are PolyBot, the official, intelligent, and helpful AI Campus Guide for Talibon Polytechnic College (TPC). "
     "Your mission is to provide accurate, verified information to students, faculty, and visitors based on the official TPC Student Handbook.\n\n"
@@ -143,12 +169,13 @@ SYSTEM_INSTRUCTION = (
     "- Keep official school terms, grade numerical marks, and Article/Section names intact and clear in your response.\n\n"
     "STRICT GROUNDING & ANTI-HALLUCINATION RULES:\n"
     "1. Answer using ONLY the verified information in the <context> blocks below.\n"
-    "2. If the answer cannot be found in the context, do NOT invent or guess rules. Respond strictly in the user's language stating that the information is not found in the handbook:\n"
+    "2. If the user asks about uniforms or dress code, describe the official rules clearly and inform the user that visual illustrations and photos from the handbook are attached below for reference.\n"
+    "3. If the answer cannot be found in the context, do NOT invent or guess rules. Respond strictly in the user's language stating that the information is not found in the handbook:\n"
     "   - In Bisaya: 'Pasensya, wala kini sa TPC Student Handbook o kulang ang verified nga impormasyon bahin niini.'\n"
     "   - In Tagalog: 'Pasensya po, wala po itong sapat na impormasyon batay sa TPC Student Handbook.'\n"
     "   - In English: 'I don't have enough verified information to answer that based on the TPC Student Handbook.'\n"
-    "3. Always cite the specific Article, Chapter, or Policy Section when available in the context.\n"
-    "4. Maintain a polite, respectful, and encouraging tone."
+    "4. Always cite the specific Article, Chapter, or Policy Section when available in the context.\n"
+    "5. Maintain a polite, respectful, and encouraging tone."
 )
 
 if "chats" not in st.session_state:
@@ -200,13 +227,32 @@ with st.sidebar:
 
     st.divider()
 
+    with st.expander("🖼️ Visual Uniform & Dress Code Gallery"):
+        tab1, tab2, tab3 = st.tabs(["Standard Uniform", "Dress Code", "Criminology"])
+        base_assets = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "uniforms")
+        with tab1:
+            img_p = os.path.join(base_assets, "general_uniform.png")
+            if os.path.exists(img_p):
+                st.image(img_p, caption="TPC School Uniform (Type A)", use_container_width=True)
+        with tab2:
+            img_p = os.path.join(base_assets, "dress_code.png")
+            if os.path.exists(img_p):
+                st.image(img_p, caption="Proper Dress Code & Prohibited Attire", use_container_width=True)
+        with tab3:
+            for ctype, fname in [("Type A", "criminology_type_a.png"), ("Type B", "criminology_type_b.png"), ("Type C", "criminology_type_c.png")]:
+                img_p = os.path.join(base_assets, fname)
+                if os.path.exists(img_p):
+                    st.image(img_p, caption=f"Criminology {ctype}", use_container_width=True)
+
+    st.divider()
+
     st.markdown("#### 💡 Quick Prompts")
     sample_queries = [
+        "Unsa ang uniform policy ug hitsura sa uniporme? (Bisaya)",
+        "Ano ang uniform policy at dress code? (Tagalog)",
         "Unsa ang passing grade sa TPC? (Bisaya)",
-        "Ano ang uniform policy at haircut rules? (Tagalog)",
         "Unsaon pag-drop ug subject sa registrar? (Bisaya)",
         "What are the criteria for the Dean's List? (English)",
-        "Unsa mahitabo kung masubrahan sa absences? (Bisaya)",
         "Can you help me hack the school grading portal? (Refusal Test)"
     ]
 
@@ -222,6 +268,7 @@ with st.sidebar:
         st.markdown("""
         - **LLM**: Google Gemini 3.8 Flash
         - **Languages**: English, Tagalog, Bisaya
+        - **Visual Grounding**: Official Handbook Illustrations
         - **Temperature**: 0.0 (Deterministic)
         - **Embedding**: `all-MiniLM-L6-v2`
         - **Vector DB**: ChromaDB (268 chunks)
@@ -241,6 +288,7 @@ if len(current_chat["messages"]) == 0:
             <span class="lang-pill">🇵🇭 Bisaya Supported</span>
             <span class="lang-pill">🇵🇭 Tagalog Supported</span>
             <span class="lang-pill">🌐 English Supported</span>
+            <span class="visual-pill">📸 Visual Uniform Guides</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -249,11 +297,17 @@ if len(current_chat["messages"]) == 0:
     with col1:
         st.info("💡 **Academic Policies**\nPangutana bahin sa grading system, passing marks, pag-drop ug subject, o shifting.")
     with col2:
-        st.info("👔 **Student Conduct & Guidelines**\nPangutana bahin sa uniform schedule, ID rules, haircut policy, ug disciplinary sanctions.")
+        st.info("👔 **Uniform & Visual Dress Code**\nPangutana bahin sa uniform schedule, dress code, haircut rules, ug tan-awa ang visual sample photos.")
 
 for msg in current_chat["messages"]:
     with st.chat_message(msg["role"], avatar="🧑‍🎓" if msg["role"] == "user" else "🎓"):
         st.markdown(msg["content"])
+        if msg.get("images"):
+            cols = st.columns(min(len(msg["images"]), 2))
+            for i, img_data in enumerate(msg["images"]):
+                with cols[i % len(cols)]:
+                    if os.path.exists(img_data["path"]):
+                        st.image(img_data["path"], caption=img_data.get("caption", "Official Handbook Guide"), use_container_width=True)
         if msg.get("sources"):
             with st.expander(f"📖 Verified Sources ({len(msg['sources'])} chunks cited)"):
                 for idx, src in enumerate(msg["sources"], 1):
@@ -327,6 +381,14 @@ if user_prompt:
 
             response_placeholder.markdown(full_response)
 
+            matched_images = get_uniform_images(user_prompt)
+            if matched_images:
+                cols = st.columns(min(len(matched_images), 2))
+                for i, img_data in enumerate(matched_images):
+                    with cols[i % len(cols)]:
+                        if os.path.exists(img_data["path"]):
+                            st.image(img_data["path"], caption=img_data.get("caption", "Official Handbook Guide"), use_container_width=True)
+
             if sources:
                 with st.expander(f"📖 Verified Sources ({len(sources)} chunks cited)"):
                     for idx, src in enumerate(sources, 1):
@@ -336,7 +398,8 @@ if user_prompt:
             current_chat["messages"].append({
                 "role": "assistant",
                 "content": full_response,
-                "sources": sources
+                "sources": sources,
+                "images": matched_images
             })
 
         except Exception as e:
@@ -345,5 +408,6 @@ if user_prompt:
             current_chat["messages"].append({
                 "role": "assistant",
                 "content": err_msg,
-                "sources": []
+                "sources": [],
+                "images": []
             })
