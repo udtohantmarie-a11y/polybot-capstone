@@ -1,4 +1,5 @@
 import os
+import uuid
 import streamlit as st
 import chromadb
 import torch
@@ -7,9 +8,6 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# -----------------------------------------------------------------------------
-# PAGE CONFIGURATION
-# -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="PolyBot - TPC AI Assistant",
     page_icon="🎓",
@@ -17,28 +15,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# -----------------------------------------------------------------------------
-# CUSTOM GEMINI-STYLE CSS
-# -----------------------------------------------------------------------------
 st.markdown("""
 <style>
-    /* Google / Gemini aesthetic clean styling */
     .stApp {
         background-color: #FFFFFF;
         font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    
-    /* Main container max width */
     .block-container {
         max-width: 950px;
         padding-top: 1.5rem;
         padding-bottom: 5rem;
     }
-
-    /* Hero welcome header */
     .hero-container {
         text-align: center;
-        padding: 2.5rem 1rem 1.5rem 1rem;
+        padding: 2.2rem 1rem 1.2rem 1rem;
         margin-bottom: 1.5rem;
     }
     .hero-title {
@@ -52,28 +42,23 @@ st.markdown("""
     .hero-subtitle {
         color: #4B5563;
         font-size: 1.05rem;
-        max-width: 600px;
+        max-width: 650px;
         margin: 0 auto;
     }
-
-    /* Suggestion cards */
-    .suggestion-card {
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 12px 16px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-align: left;
+    .lang-pills {
+        margin-top: 0.8rem;
     }
-    .suggestion-card:hover {
+    .lang-pill {
+        display: inline-block;
         background: #EFF6FF;
-        border-color: #3B82F6;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+        color: #1D4ED8;
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        margin: 0 4px;
+        border: 1px solid #BFDBFE;
     }
-
-    /* Citations expander */
     .citation-box {
         background: #F8FAFC;
         border-left: 3px solid #1B365D;
@@ -84,8 +69,6 @@ st.markdown("""
         font-size: 0.88rem;
         color: #334155;
     }
-
-    /* Sidebar custom styling */
     [data-testid="stSidebar"] {
         background-color: #F8FAFC;
         border-right: 1px solid #E2E8F0;
@@ -94,15 +77,13 @@ st.markdown("""
         font-weight: 700;
         font-size: 1.15rem;
         color: #1B365D;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.2rem;
     }
     .sidebar-sub {
         font-size: 0.85rem;
         color: #64748B;
-        margin-bottom: 1rem;
+        margin-bottom: 0.8rem;
     }
-
-    /* Badge */
     .status-badge {
         display: inline-block;
         background: #ECFDF5;
@@ -113,46 +94,38 @@ st.markdown("""
         border-radius: 9999px;
         border: 1px solid #A7F3D0;
     }
+    .chat-history-item {
+        font-size: 0.88rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# CACHED RESOURCE INITIALIZATION
-# -----------------------------------------------------------------------------
-@st.cache_resource(show_spinner="Initializing PolyBot AI engine & vector store...")
+@st.cache_resource(show_spinner=False)
 def init_resources():
     load_dotenv()
-    
-    # Paths
     base_dir = os.path.dirname(os.path.abspath(__file__))
     db_path = os.path.join(base_dir, 'data', 'chroma_db')
     
-    # 1. HuggingFace Embedding Model (sentence-transformers/all-MiniLM-L6-v2)
     model_name = 'sentence-transformers/all-MiniLM-L6-v2'
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModel.from_pretrained(model_name)
     model.eval()
     
-    # 2. ChromaDB Persistent Client & Collection
     chroma_client = chromadb.PersistentClient(path=db_path)
     collection = chroma_client.get_collection(name='tpc_student_handbook')
-    
-    # 3. Google Gemini Client
     gemini_client = genai.Client()
     
     return tokenizer, model, collection, gemini_client
 
 tokenizer, embedding_model, collection, gemini_client = init_resources()
 
-# -----------------------------------------------------------------------------
-# RAG HELPER FUNCTIONS
-# -----------------------------------------------------------------------------
 def embed_query_text(text: str):
-    """Generates 384-dimensional dense embedding for query."""
     inputs = tokenizer([text], padding=True, truncation=True, return_tensors="pt", max_length=512)
     with torch.no_grad():
         outputs = embedding_model(**inputs)
-    
     attention_mask = inputs['attention_mask']
     token_embeddings = outputs[0]
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
@@ -162,153 +135,181 @@ def embed_query_text(text: str):
     return embeddings.tolist()
 
 SYSTEM_INSTRUCTION = (
-    "You are PolyBot, the official and intelligent AI Campus Guide for Talibon Polytechnic College (TPC). "
-    "Your mission is to provide accurate, verified information to students, faculty, and visitors. "
-    "Strict Grounding Rules:\n"
-    "1. Answer using ONLY the verified information provided in the <context> blocks below.\n"
-    "2. If the user question cannot be answered from the provided context, respond EXACTLY with:\n"
-    "   'I don't have enough verified information to answer that based on the TPC Student Handbook.'\n"
-    "3. Never guess, assume, or fabricate school policies or rules.\n"
-    "4. Always cite the specific Article, Chapter, or Policy Section when available in the context.\n"
-    "5. Be polite, formal, encouraging, and clear."
+    "You are PolyBot, the official, intelligent, and helpful AI Campus Guide for Talibon Polytechnic College (TPC). "
+    "Your mission is to provide accurate, verified information to students, faculty, and visitors based on the official TPC Student Handbook.\n\n"
+    "MULTILINGUAL CAPABILITY:\n"
+    "- You fluently understand and speak English, Tagalog (Filipino), and Bisaya (Cebuano).\n"
+    "- ALWAYS answer in the EXACT language used by the user. If the user asks in Bisaya, respond naturally in Bisaya. If the user asks in Tagalog, respond in Tagalog. If the user asks in English, respond in English.\n"
+    "- Keep official school terms, grade numerical marks, and Article/Section names intact and clear in your response.\n\n"
+    "STRICT GROUNDING & ANTI-HALLUCINATION RULES:\n"
+    "1. Answer using ONLY the verified information in the <context> blocks below.\n"
+    "2. If the answer cannot be found in the context, do NOT invent or guess rules. Respond strictly in the user's language stating that the information is not found in the handbook:\n"
+    "   - In Bisaya: 'Pasensya, wala kini sa TPC Student Handbook o kulang ang verified nga impormasyon bahin niini.'\n"
+    "   - In Tagalog: 'Pasensya po, wala po itong sapat na impormasyon batay sa TPC Student Handbook.'\n"
+    "   - In English: 'I don't have enough verified information to answer that based on the TPC Student Handbook.'\n"
+    "3. Always cite the specific Article, Chapter, or Policy Section when available in the context.\n"
+    "4. Maintain a polite, respectful, and encouraging tone."
 )
 
-# -----------------------------------------------------------------------------
-# SESSION STATE (CONVERSATIONAL MEMORY - DELIVERABLE 12)
-# -----------------------------------------------------------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "chats" not in st.session_state:
+    initial_id = str(uuid.uuid4())
+    st.session_state.chats = {
+        initial_id: {
+            "title": "New Chat",
+            "messages": []
+        }
+    }
+    st.session_state.current_chat_id = initial_id
 
-# -----------------------------------------------------------------------------
-# SIDEBAR
-# -----------------------------------------------------------------------------
+if st.session_state.current_chat_id not in st.session_state.chats:
+    st.session_state.current_chat_id = list(st.session_state.chats.keys())[0]
+
+current_chat = st.session_state.chats[st.session_state.current_chat_id]
+
 with st.sidebar:
     st.markdown('<div class="sidebar-header">🎓 Talibon Polytechnic College</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-sub">PolyBot: Student Handbook & Campus AI</div>', unsafe_allow_html=True)
-    
-    st.markdown('<span class="status-badge">● RAG Online (268 Chunks)</span>', unsafe_allow_html=True)
+    st.markdown('<span class="status-badge">● Online (268 Chunks)</span>', unsafe_allow_html=True)
     st.write("")
     
-    if st.button("➕ New Conversation", use_container_width=True, type="primary"):
-        st.session_state.messages = []
+    if st.button("➕ New Chat / Bag-ong Chat", use_container_width=True, type="primary"):
+        new_id = str(uuid.uuid4())
+        st.session_state.chats[new_id] = {
+            "title": "New Chat",
+            "messages": []
+        }
+        st.session_state.current_chat_id = new_id
         st.rerun()
-        
-    st.divider()
-    
-    st.markdown("#### 💡 Quick Questions")
-    sample_queries = [
-        "What is the grading system and passing grade?",
-        "What are the rules regarding student uniform?",
-        "How can a student officially drop a subject?",
-        "What are the criteria for the Dean's List?",
-        "What happens if I exceed the limit on absences?",
-        "Can you help me hack the school grading portal?"
-    ]
-    
-    for q in sample_queries:
-        if st.button(f"📌 {q}", key=f"btn_{q}", use_container_width=True):
-            st.session_state.selected_prompt = q
+
+    st.markdown("#### 💬 Chat History")
+    chat_keys = list(st.session_state.chats.keys())
+    for cid in reversed(chat_keys):
+        cdata = st.session_state.chats[cid]
+        is_active = (cid == st.session_state.current_chat_id)
+        btn_label = f"{'👉 ' if is_active else '🗨️ '}{cdata['title']}"
+        if st.button(btn_label, key=f"hist_{cid}", use_container_width=True):
+            st.session_state.current_chat_id = cid
+            st.rerun()
+
+    if len(st.session_state.chats) > 1:
+        if st.button("🗑️ Clear All Chats", use_container_width=True):
+            new_id = str(uuid.uuid4())
+            st.session_state.chats = {new_id: {"title": "New Chat", "messages": []}}
+            st.session_state.current_chat_id = new_id
             st.rerun()
 
     st.divider()
-    
-    with st.expander("⚙️ System Architecture & Specs"):
+
+    st.markdown("#### 💡 Quick Prompts")
+    sample_queries = [
+        "Unsa ang passing grade sa TPC? (Bisaya)",
+        "Ano ang uniform policy at haircut rules? (Tagalog)",
+        "Unsaon pag-drop ug subject sa registrar? (Bisaya)",
+        "What are the criteria for the Dean's List? (English)",
+        "Unsa mahitabo kung masubrahan sa absences? (Bisaya)",
+        "Can you help me hack the school grading portal? (Refusal Test)"
+    ]
+
+    for q in sample_queries:
+        clean_q = q.split(" (")[0]
+        if st.button(f"📌 {q}", key=f"btn_{q}", use_container_width=True):
+            st.session_state.selected_prompt = clean_q
+            st.rerun()
+
+    st.divider()
+
+    with st.expander("⚙️ System Specs"):
         st.markdown("""
         - **LLM**: Google Gemini 3.8 Flash
+        - **Languages**: English, Tagalog, Bisaya
         - **Temperature**: 0.0 (Deterministic)
-        - **Embedding**: `all-MiniLM-L6-v2` (384-dim)
-        - **Vector Store**: ChromaDB (Cosine Similarity)
-        - **Memory**: Multi-Turn Session State
+        - **Embedding**: `all-MiniLM-L6-v2`
+        - **Vector DB**: ChromaDB (268 chunks)
         """)
-        
+
     st.caption("Capstone Project | IS Professional Elective #4\nTeam: Jerwin, Trisha, Jenalyn, Kaycee")
 
-# -----------------------------------------------------------------------------
-# MAIN CHAT DISPLAY
-# -----------------------------------------------------------------------------
-if len(st.session_state.messages) == 0:
+if len(current_chat["messages"]) == 0:
     st.markdown("""
     <div class="hero-container">
         <div class="hero-title">PolyBot TPC Assistant</div>
         <div class="hero-subtitle">
-            Welcome! I am your AI guide grounded directly in the <b>TPC Student Handbook v.04</b> and official campus documents. 
-            Ask me anything about grading, academic policies, campus rules, and guidelines.
+            Grounded sa opisyal nga <b>TPC Student Handbook v.04</b> ug school policies.
+            Makapangutana ka gamit ang <b>Bisaya</b>, <b>Tagalog</b>, o <b>English</b>!
+        </div>
+        <div class="lang-pills">
+            <span class="lang-pill">🇵🇭 Bisaya Supported</span>
+            <span class="lang-pill">🇵🇭 Tagalog Supported</span>
+            <span class="lang-pill">🌐 English Supported</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Quick launch cards
+
     col1, col2 = st.columns(2)
     with col1:
-        st.info("💡 **Academic Policies**\nAsk about grading rubrics, passing marks, shifting, and graduation requirements.")
+        st.info("💡 **Academic Policies**\nPangutana bahin sa grading system, passing marks, pag-drop ug subject, o shifting.")
     with col2:
-        st.info("👔 **Student Life & Conduct**\nInquire about campus dress code, uniform schedules, and student disciplinary codes.")
+        st.info("👔 **Student Conduct & Guidelines**\nPangutana bahin sa uniform schedule, ID rules, haircut policy, ug disciplinary sanctions.")
 
-# Display existing chat history
-for msg in st.session_state.messages:
+for msg in current_chat["messages"]:
     with st.chat_message(msg["role"], avatar="🧑‍🎓" if msg["role"] == "user" else "🎓"):
         st.markdown(msg["content"])
         if msg.get("sources"):
-            with st.expander(f"📖 View Verified Sources ({len(msg['sources'])} chunks cited)"):
+            with st.expander(f"📖 Verified Sources ({len(msg['sources'])} chunks cited)"):
                 for idx, src in enumerate(msg["sources"], 1):
                     st.markdown(f"**Source #{idx} ({src.get('source', 'TPC Handbook')}):**")
                     st.markdown(f'<div class="citation-box">{src.get("text", "")}</div>', unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# HANDLE USER INPUT
-# -----------------------------------------------------------------------------
-user_prompt = st.chat_input("Ask PolyBot about TPC student handbook, rules, or policies...")
+user_prompt = st.chat_input("Pangutana bahin sa TPC handbook, rules, o policies (English, Tagalog, Bisaya)...")
 
-# Check if a sidebar prompt button was clicked
 if "selected_prompt" in st.session_state and st.session_state.selected_prompt:
     user_prompt = st.session_state.selected_prompt
     del st.session_state["selected_prompt"]
 
 if user_prompt:
-    # 1. Append user message to state
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
+    if len(current_chat["messages"]) == 0:
+        short_title = user_prompt.strip()[:28] + ("..." if len(user_prompt.strip()) > 28 else "")
+        current_chat["title"] = short_title
+
+    current_chat["messages"].append({"role": "user", "content": user_prompt})
     with st.chat_message("user", avatar="🧑‍🎓"):
         st.markdown(user_prompt)
 
-    # 2. Vector Retrieval (ChromaDB)
     with st.chat_message("assistant", avatar="🎓"):
-        with st.spinner("Searching official TPC Student Handbook..."):
+        with st.spinner("Gisusi ang TPC Student Handbook..."):
             query_vector = embed_query_text(user_prompt)
             results = collection.query(
                 query_embeddings=query_vector,
                 n_results=5
             )
-            
+
             retrieved_docs = results['documents'][0] if results.get('documents') else []
             retrieved_metas = results['metadatas'][0] if results.get('metadatas') else []
-            
-            # Formulate sources list
+
             sources = []
             for doc_text, meta in zip(retrieved_docs, retrieved_metas):
                 sources.append({
                     "text": doc_text,
                     "source": meta.get("source", "TPC Student Handbook v.04") if meta else "TPC Student Handbook v.04"
                 })
-            
+
             context_text = "\n\n---\n\n".join(retrieved_docs)
-            
-            # Multi-turn memory assembly (last 2 turns)
+
             recent_turns = ""
-            if len(st.session_state.messages) > 1:
-                recent_history = st.session_state.messages[-3:-1]
+            if len(current_chat["messages"]) > 1:
+                recent_history = current_chat["messages"][-5:-1]
                 history_lines = [f"{m['role'].capitalize()}: {m['content']}" for m in recent_history]
-                recent_turns = "\nPrevious Conversation:\n" + "\n".join(history_lines) + "\n"
+                recent_turns = "\nRecent Conversation History:\n" + "\n".join(history_lines) + "\n"
 
             prompt_content = (
                 f"<context>\n{context_text}\n</context>\n"
                 f"{recent_turns}\n"
-                f"Current User Question: {user_prompt}"
+                f"User Question: {user_prompt}"
             )
 
-        # 3. Stream Gemini Response
         response_placeholder = st.empty()
         full_response = ""
-        
+
         try:
             stream = gemini_client.models.generate_content_stream(
                 model='gemini-3.8-flash',
@@ -318,34 +319,31 @@ if user_prompt:
                     temperature=0.0
                 )
             )
-            
+
             for chunk in stream:
                 if chunk.text:
                     full_response += chunk.text
                     response_placeholder.markdown(full_response + "▌")
-            
+
             response_placeholder.markdown(full_response)
-            
-            # Show citations expander
+
             if sources:
-                with st.expander(f"📖 View Verified Sources ({len(sources)} chunks cited)"):
+                with st.expander(f"📖 Verified Sources ({len(sources)} chunks cited)"):
                     for idx, src in enumerate(sources, 1):
                         st.markdown(f"**Source #{idx} ({src.get('source', 'TPC Handbook')}):**")
                         st.markdown(f'<div class="citation-box">{src.get("text", "")}</div>', unsafe_allow_html=True)
 
-            # Store to history
-            st.session_state.messages.append({
+            current_chat["messages"].append({
                 "role": "assistant",
                 "content": full_response,
                 "sources": sources
             })
 
         except Exception as e:
-            err_msg = f"Sorry, an error occurred while connecting to Gemini: {e}"
+            err_msg = f"Error connecting to AI service: {e}"
             response_placeholder.error(err_msg)
-            st.session_state.messages.append({
+            current_chat["messages"].append({
                 "role": "assistant",
                 "content": err_msg,
                 "sources": []
             })
-
