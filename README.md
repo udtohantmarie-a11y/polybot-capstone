@@ -5,6 +5,10 @@
 
 PolyBot is an enterprise-grade Retrieval-Augmented Generation (RAG) web application specifically engineered for Talibon Polytechnic College. It assists students, faculty, and visitors with inquiries regarding academic policies, grading schemes, uniform regulations, dropping procedures, and student conduct, strictly grounded in the official **TPC Student Handbook v.04**.
 
+* **🌐 Live Deployed App**: `https://polybot-capstone-production.up.railway.app` (Runs publicly on Railway via Docker, no login required)
+* **📄 Knowledge Source**: Official TPC Student Handbook v.04 (203 pages, extracted and segmented into 268 discrete chunks) and Official TPC Website Compilation.
+* **⚠️ API Usage & Rate Limits**: PolyBot utilizes Google Gemini 3.8 Flash on a free-tier API plan (15 requests/minute, 1,000,000 tokens/minute). If multiple requests are sent rapidly, brief rate-limiting pauses may occur.
+
 ---
 
 ## 📚 Gabay sa mga Ginamit na Teknolohiya at Bakit Sila Ginamit (Tech Stack Guide)
@@ -100,10 +104,13 @@ Kapag nag-type ang isang estudyante sa website:
 ## 🚀 Paano Patakbuhin Locally
 
 ```powershell
-# 1. Siguraduhing installed ang dependencies
+# 1. Kopyahin ang .env.example papuntang .env at ilagay ang iyong Gemini API Key
+copy .env.example .env
+
+# 2. Siguraduhing installed ang dependencies
 pip install -r requirements.txt
 
-# 2. Patakbuhin ang Streamlit web app
+# 3. Patakbuhin ang Streamlit web app
 python -m streamlit run app.py
 ```
 Buksan sa browser: `http://localhost:8501`

@@ -275,6 +275,7 @@ with st.sidebar:
         """)
 
     st.caption("Capstone Project | IS Professional Elective #4\nTeam: Jerwin, Trisha, Jenalyn, Kaycee")
+    st.caption("ℹ️ **API Quota Notice**: Powered by Gemini API free tier (15 Requests/Min). Please allow a moment between queries.")
 
 if len(current_chat["messages"]) == 0:
     st.markdown("""

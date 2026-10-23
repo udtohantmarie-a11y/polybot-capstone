@@ -372,6 +372,42 @@ for path_name, desc in repo_items:
 
 doc.add_paragraph()
 
+# -------------------------------------------------------------
+# SECTION 6: 5-TO-8 MINUTE DEMO VIDEO RECORDING SCRIPT & FLOW
+# -------------------------------------------------------------
+add_custom_heading('6. 5-to-8 Minute Demo Video Recording Script & Flow', level=1)
+doc.add_paragraph(
+    'Per the Semester Project Guidelines, the video demonstration must be 5 to 8 minutes long and cover the following 5 parts in exact order:'
+)
+
+video_parts = [
+    ('Part 1 (0:00 - 1:15): Problem & Knowledge Source', 'Speaker: Jerwin Villarin', 'Open deployed app homepage or title slide. Explain the problem (students struggling with 203-page PDF) and the official knowledge source (TPC Student Handbook v.04, 268 chunks).'),
+    ('Part 2 (1:15 - 2:30): System Architecture', 'Speakers: Trisha & Jenalyn', 'Show architecture diagram / specs expander. Detail embedding model (all-MiniLM-L6-v2), vector store (ChromaDB, cosine similarity), LLM (Google Gemini 3.8 Flash, Temp 0.0), and conversational memory.'),
+    ('Part 3 (2:30 - 3:45): Live App Walkthrough', 'Speaker: Kaycee Cerida', 'Show live Railway app. Highlight: opens with NO login and NO install; modern Gemini UI; chat history sidebar; interactive Visual Uniform Gallery.'),
+    ('Part 4 (3:45 - 5:45): Live Query Demonstration (4 Queries)', 'Speaker: Kaycee & Team', 'Execute 4 live queries: 1. Academic grading (English, citations drawer); 2. Uniform & visual dress code (Bisaya, automatic photos); 3. Multi-turn memory follow-up; 4. Out-of-scope refusal (anti-hallucination guardrail).'),
+    ('Part 5 (5:45 - 6:45): What We Would Improve & Conclusion', 'Speakers: Trisha & Jerwin', 'Discuss future improvements: distributed vector indexing (Qdrant/Milvus) for 100x scaling, Cross-Encoder re-ranker, and speech/voice input.')
+]
+
+v_table = doc.add_table(rows=1, cols=3)
+v_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+v_table.style = 'Table Grid'
+v_hdr = v_table.rows[0].cells
+v_hdr[0].text = 'Video Section & Time'
+v_hdr[0].paragraphs[0].runs[0].bold = True
+v_hdr[1].text = 'Speaker'
+v_hdr[1].paragraphs[0].runs[0].bold = True
+v_hdr[2].text = 'Screen Action & Content'
+v_hdr[2].paragraphs[0].runs[0].bold = True
+
+for s_time, spk, act in video_parts:
+    row_cells = v_table.add_row().cells
+    row_cells[0].text = s_time
+    row_cells[0].paragraphs[0].runs[0].bold = True
+    row_cells[1].text = spk
+    row_cells[2].text = act
+
+doc.add_paragraph()
+
 # Conclusion Note
 p_fin = doc.add_paragraph()
 p_fin.alignment = WD_ALIGN_PARAGRAPH.CENTER
