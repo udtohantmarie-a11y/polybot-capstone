@@ -338,8 +338,42 @@ if user_prompt:
                 n_results=8
             )
 
-            retrieved_docs = results['documents'][0] if results.get('documents') else []
-            retrieved_metas = results['metadatas'][0] if results.get('metadatas') else []
+            retrieved_docs = list(results['documents'][0]) if results.get('documents') else []
+            retrieved_metas = list(results['metadatas'][0]) if results.get('metadatas') else []
+
+            q_lower = user_prompt.lower()
+
+            if any(w in q_lower for w in ["grade", "grading", "passing", "gwa", "scale", "mark", "failed", "failing", "tres", "grado", "minimum grade", "passing grade"]):
+                boost_res = collection.get(ids=["handbook_chunk_49", "handbook_chunk_50"])
+                if boost_res and boost_res.get("documents"):
+                    for b_doc in reversed(boost_res["documents"]):
+                        if b_doc not in retrieved_docs:
+                            retrieved_docs.insert(0, b_doc)
+                            retrieved_metas.insert(0, {"source": "TPC Student Handbook v.04 - Chapter 6 Grading System"})
+
+            if any(w in q_lower for w in ["uniform", "uniporme", "dress code", "dresscode", "attire", "bawal", "itsura", "hitsura", "crocs", "sanina", "sinina", "clothes", "shoes", "haircut", "gupit", "suot", "bisti", "skirt", "blouse"]):
+                boost_res = collection.get(ids=["handbook_chunk_132", "handbook_chunk_133", "handbook_chunk_134"])
+                if boost_res and boost_res.get("documents"):
+                    for b_doc in reversed(boost_res["documents"]):
+                        if b_doc not in retrieved_docs:
+                            retrieved_docs.insert(0, b_doc)
+                            retrieved_metas.insert(0, {"source": "TPC Student Handbook v.04 - School Uniform & Dress Code"})
+
+            if any(w in q_lower for w in ["dean's list", "deans list", "honor", "honors", "cum laude", "summa", "magna", "academic award"]):
+                boost_res = collection.get(ids=["handbook_chunk_43", "handbook_chunk_44"])
+                if boost_res and boost_res.get("documents"):
+                    for b_doc in reversed(boost_res["documents"]):
+                        if b_doc not in retrieved_docs:
+                            retrieved_docs.insert(0, b_doc)
+                            retrieved_metas.insert(0, {"source": "TPC Student Handbook v.04 - Academic Honors & Awards"})
+
+            if any(w in q_lower for w in ["drop", "dropping", "i-drop", "idrop", "mag-drop", "magdrop", "withdrawal", "withdraw", "add", "adding"]):
+                boost_res = collection.get(ids=["handbook_chunk_139", "website_chunk_9"])
+                if boost_res and boost_res.get("documents"):
+                    for b_doc in reversed(boost_res["documents"]):
+                        if b_doc not in retrieved_docs:
+                            retrieved_docs.insert(0, b_doc)
+                            retrieved_metas.insert(0, {"source": "TPC Student Handbook v.04 - Adding/Dropping of Subjects"})
 
             sources = []
             for doc_text, meta in zip(retrieved_docs, retrieved_metas):
