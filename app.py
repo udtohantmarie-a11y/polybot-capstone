@@ -364,24 +364,45 @@ if user_prompt:
 
         response_placeholder = st.empty()
         full_response = ""
+        success = False
+        last_error = None
 
-        try:
-            stream = gemini_client.models.generate_content_stream(
-                model='gemini-3.8-flash',
-                contents=prompt_content,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    temperature=0.0
+        candidate_models = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-flash-latest']
+
+        for cand_model in candidate_models:
+            try:
+                stream = gemini_client.models.generate_content_stream(
+                    model=cand_model,
+                    contents=prompt_content,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        temperature=0.0
+                    )
                 )
-            )
 
-            for chunk in stream:
-                if chunk.text:
-                    full_response += chunk.text
-                    response_placeholder.markdown(full_response + "▌")
+                for chunk in stream:
+                    if chunk.text:
+                        full_response += chunk.text
+                        response_placeholder.markdown(full_response + "▌")
 
-            response_placeholder.markdown(full_response)
+                response_placeholder.markdown(full_response)
+                success = True
+                break
+            except Exception as e:
+                last_error = e
+                full_response = ""
+                continue
 
+        if not success:
+            err_msg = f"Error connecting to AI service: {last_error}"
+            response_placeholder.error(err_msg)
+            current_chat["messages"].append({
+                "role": "assistant",
+                "content": err_msg,
+                "sources": [],
+                "images": []
+            })
+        else:
             matched_images = get_uniform_images(user_prompt)
             if matched_images:
                 cols = st.columns(min(len(matched_images), 2))
@@ -401,14 +422,4 @@ if user_prompt:
                 "content": full_response,
                 "sources": sources,
                 "images": matched_images
-            })
-
-        except Exception as e:
-            err_msg = f"Error connecting to AI service: {e}"
-            response_placeholder.error(err_msg)
-            current_chat["messages"].append({
-                "role": "assistant",
-                "content": err_msg,
-                "sources": [],
-                "images": []
             })
