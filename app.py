@@ -141,7 +141,7 @@ def embed_query_text(text: str):
 
 def get_uniform_images(query: str):
     q = query.lower()
-    keywords = ["uniform", "uniporme", "dress code", "dresscode", "sanina", "sinina", "attire", "suot", "bisti", "criminology", "gupit", "haircut"]
+    keywords = ["uniform", "uniporme", "itsura", "hitsura", "dress code", "dresscode", "sanina", "sinina", "attire", "suot", "bisti", "criminology", "gupit", "haircut", "polo", "blouse", "slacks", "skirt"]
     if not any(k in q for k in keywords):
         return []
     
@@ -335,7 +335,7 @@ if user_prompt:
             query_vector = embed_query_text(user_prompt)
             results = collection.query(
                 query_embeddings=query_vector,
-                n_results=5
+                n_results=8
             )
 
             retrieved_docs = results['documents'][0] if results.get('documents') else []
